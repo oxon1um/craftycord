@@ -12,10 +12,49 @@ logger = logging.getLogger(__name__)
 def redact_authorization(headers: Dict[str, str]) -> Dict[str, str]:
     """Return a copy of headers with Authorization value redacted (case-insensitive)."""
     redacted = headers.copy()
-    for key in list(redacted.keys()):
+    for key in redacted.keys():
         if key.lower() == "authorization":
             redacted[key] = "REDACTED"
     return redacted
+
+
+def _first(payload: Dict[str, Any], keys: list[str]) -> Optional[Any]:
+    for key in keys:
+        if key in payload and payload[key] is not None:
+            return payload[key]
+    return None
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        if isinstance(value, str):
+            segment = value.split("/")[0]
+            num = "".join(ch for ch in segment if ch.isdigit() or ch == "-")
+            if num:
+                try:
+                    return int(num)
+                except ValueError:
+                    return None
+    return None
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        if isinstance(value, str):
+            digits = "".join(ch for ch in value if (ch.isdigit() or ch in ".-"))
+            try:
+                return float(digits)
+            except ValueError:
+                return None
+    return None
 
 
 @dataclass
@@ -74,16 +113,17 @@ class DiscopanelAPI:
         self.auth_token: Optional[str] = None
 
     async def __aenter__(self) -> "DiscopanelAPI":
-        trace_config = aiohttp.TraceConfig()
-
-        async def on_request_start(session, trace_config_ctx, params):
+        async def _log_start(session: aiohttp.ClientSession, ctx, params: aiohttp.TraceRequestStartParams):
             logger.debug(f"Starting request to {params.url}")
+            await asyncio.sleep(0)
 
-        async def on_request_end(session, trace_config_ctx, params):
+        async def _log_end(session: aiohttp.ClientSession, ctx, params: aiohttp.TraceRequestEndParams):
             logger.debug(f"Request to {params.url} ended with status {params.response.status}")
+            await asyncio.sleep(0)
 
-        trace_config.on_request_start.append(on_request_start)
-        trace_config.on_request_end.append(on_request_end)
+        trace_config = aiohttp.TraceConfig()
+        trace_config.on_request_start.append(_log_start)
+        trace_config.on_request_end.append(_log_end)
 
         connector = aiohttp.TCPConnector(limit=10, ssl=False)
         self.session = aiohttp.ClientSession(
@@ -175,43 +215,6 @@ class DiscopanelAPI:
             raise DiscopanelAPIError(f"Unexpected error: {str(e)}")
 
     def _parse_server_info(self, data: Dict[str, Any]) -> ServerInfo:
-        def _first(payload: Dict[str, Any], keys: list[str]) -> Optional[Any]:
-            for key in keys:
-                if key in payload and payload[key] is not None:
-                    return payload[key]
-            return None
-
-        def _safe_int(value: Any) -> Optional[int]:
-            if value is None:
-                return None
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                if isinstance(value, str):
-                    # Handle formats like "0/20" by taking the first segment
-                    segment = value.split("/")[0]
-                    num = "".join(ch for ch in segment if ch.isdigit() or ch == "-")
-                    if num:
-                        try:
-                            return int(num)
-                        except ValueError:
-                            return None
-                return None
-
-        def _safe_float(value: Any) -> Optional[float]:
-            if value is None:
-                return None
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                if isinstance(value, str):
-                    digits = "".join(ch for ch in value if (ch.isdigit() or ch in ".-"))
-                    try:
-                        return float(digits)
-                    except ValueError:
-                        return None
-                return None
-
         payload = data.get("server", data.get("data", data))
         status_raw = _first(payload, ["status", "server_status", "state"]) or "UNKNOWN"
         name_raw = _first(payload, ["name", "server_name"]) or "Unknown"

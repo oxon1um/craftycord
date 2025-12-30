@@ -2,9 +2,16 @@ import os
 import asyncio
 import logging
 from dotenv import load_dotenv
-from .utils.bot_commands import create_bot
-from .utils.monitoring import initialize_sentry, capture_exception, get_monitoring_status
-from .utils.config_validation import perform_startup_health_check
+
+# Support running as a module (`python -m src.main`) or as a script (`python src/main.py`)
+try:  # package-style imports
+    from .utils.bot_commands import create_bot  # type: ignore
+    from .utils.monitoring import initialize_sentry, capture_exception, get_monitoring_status  # type: ignore
+    from .utils.config_validation import perform_startup_health_check  # type: ignore
+except ImportError:  # script-style fallback
+    from utils.bot_commands import create_bot  # type: ignore
+    from utils.monitoring import initialize_sentry, capture_exception, get_monitoring_status  # type: ignore
+    from utils.config_validation import perform_startup_health_check  # type: ignore
 
 # Load environment variables
 load_dotenv()
