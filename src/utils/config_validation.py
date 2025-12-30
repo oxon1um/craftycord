@@ -1,8 +1,4 @@
-"""Configuration validation and startup tests for Crafty Discord Bot
-
-This module provides comprehensive configuration validation and pre-flight checks
-to ensure the bot can authenticate and operate correctly before startup.
-"""
+"""Configuration validation and startup tests for the Discopanel Discord Bot."""
 
 import os
 import uuid
@@ -12,15 +8,15 @@ from typing import Dict, List, Optional, Union, Tuple
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from utils.crafty_api import CraftyAPI, CraftyAPIError, ApiResponse
+from utils.discopanel_api import DiscopanelAPI, DiscopanelAPIError, ApiResponse
 from utils.token_manager import TokenManager, TokenManagerError
 
 
 logger = logging.getLogger(__name__)
 
 # Configuration validation constants
-REQUIRED_ENV_VARS = ['DISCORD_TOKEN', 'CRAFTY_URL', 'SERVER_ID']
-OPTIONAL_ENV_VARS = ['GUILD_ID', 'CRAFTY_TOKEN', 'CRAFTY_USERNAME', 'CRAFTY_PASSWORD']
+REQUIRED_ENV_VARS = ['DISCORD_TOKEN', 'DISCOPANEL_URL', 'SERVER_ID', 'DISCOPANEL_USERNAME', 'DISCOPANEL_PASSWORD']
+OPTIONAL_ENV_VARS = ['GUILD_ID']
 STARTUP_TEST_TIMEOUT = 20
 TOKEN_LIFETIME_BUFFER_HOURS = 2
 
@@ -100,62 +96,36 @@ class ConfigurationValidator:
     
     @staticmethod
     def validate_authentication_configuration() -> ValidationResult:
-        """Validate Crafty Controller authentication configuration
-        
-        Returns:
-            ValidationResult indicating if auth config is valid
-        """
-        crafty_token = os.getenv('CRAFTY_TOKEN')
-        crafty_username = os.getenv('CRAFTY_USERNAME')
-        crafty_password = os.getenv('CRAFTY_PASSWORD')
-        
-        # Check if we have either token OR both username and password
-        if crafty_token:
-            if crafty_username or crafty_password:
-                logger.warning(
-                    "Both CRAFTY_TOKEN and username/password provided. "
-                    "Token will take precedence."
-                )
-            
-            return ValidationResult(
-                success=True,
-                message="Static token authentication configured",
-                details={
-                    'auth_method': 'static_token',
-                    'has_backup_credentials': bool(crafty_username and crafty_password),
-                    'token_length': len(crafty_token)
-                }
-            )
-        
-        elif crafty_username and crafty_password:
+        """Validate Discopanel authentication configuration"""
+        discopanel_username = os.getenv('DISCOPANEL_USERNAME')
+        discopanel_password = os.getenv('DISCOPANEL_PASSWORD')
+
+        if discopanel_username and discopanel_password:
             return ValidationResult(
                 success=True,
                 message="Username/password authentication configured",
                 details={
                     'auth_method': 'credentials',
-                    'username': crafty_username,
-                    'password_length': len(crafty_password)
+                    'username': discopanel_username,
+                    'password_length': len(discopanel_password)
                 }
             )
-        
-        else:
-            missing_items = []
-            if not crafty_token:
-                missing_items.append("CRAFTY_TOKEN")
-            if not crafty_username:
-                missing_items.append("CRAFTY_USERNAME")
-            if not crafty_password:
-                missing_items.append("CRAFTY_PASSWORD")
-            
-            return ValidationResult(
-                success=False,
-                message="Invalid Crafty authentication configuration",
-                details={
-                    'error': "Either CRAFTY_TOKEN must be provided, or both CRAFTY_USERNAME and CRAFTY_PASSWORD",
-                    'missing': ', '.join(missing_items)
-                },
-                error_code="INVALID_AUTH_CONFIG"
-            )
+
+        missing_items = []
+        if not discopanel_username:
+            missing_items.append("DISCOPANEL_USERNAME")
+        if not discopanel_password:
+            missing_items.append("DISCOPANEL_PASSWORD")
+
+        return ValidationResult(
+            success=False,
+            message="Invalid Discopanel authentication configuration",
+            details={
+                'error': "DISCOPANEL_USERNAME and DISCOPANEL_PASSWORD are required",
+                'missing': ', '.join(missing_items)
+            },
+            error_code="INVALID_AUTH_CONFIG"
+        )
     
     @staticmethod
     def validate_discord_configuration() -> ValidationResult:
@@ -213,94 +183,19 @@ class AuthenticationTester:
     """Tests authentication methods and API connectivity"""
     
     @staticmethod
-    async def test_static_token_auth(crafty_url: str, token: str, server_id: str) -> AuthenticationTestResult:
-        """Test static token authentication
-        
-        Args:
-            crafty_url: Crafty Controller base URL
-            token: Static API token
-            server_id: Server ID to test with
-            
-        Returns:
-            AuthenticationTestResult with test results
-        """
-        start_time = asyncio.get_event_loop().time()
-        
-        try:
-            async with CraftyAPI(crafty_url, token) as api:
-                async with asyncio.timeout(STARTUP_TEST_TIMEOUT):
-                    response = await api.get_server_stats(server_id)
-                    
-                end_time = asyncio.get_event_loop().time()
-                latency = (end_time - start_time) * 1000  # Convert to milliseconds
-                
-                if response.success:
-                    return AuthenticationTestResult(
-                        success=True,
-                        auth_method="static_token",
-                        message="Static token authentication successful",
-                        token_info={
-                            'method': 'static_token',
-                            'validated_at': datetime.now(timezone.utc)
-                        },
-                        response_format_valid=True,
-                        api_latency_ms=latency
-                    )
-                else:
-                    return AuthenticationTestResult(
-                        success=False,
-                        auth_method="static_token",
-                        message=f"API request failed: {response.message}",
-                        response_format_valid=False,
-                        api_latency_ms=latency,
-                        error_details=response.message
-                    )
-                    
-        except asyncio.TimeoutError:
-            return AuthenticationTestResult(
-                success=False,
-                auth_method="static_token",
-                message="Authentication test timed out",
-                error_details=f"Request exceeded {STARTUP_TEST_TIMEOUT}s timeout"
-            )
-        except CraftyAPIError as e:
-            return AuthenticationTestResult(
-                success=False,
-                auth_method="static_token",
-                message=f"Authentication failed: {str(e)}",
-                error_details=str(e)
-            )
-        except Exception as e:
-            return AuthenticationTestResult(
-                success=False,
-                auth_method="static_token",
-                message=f"Unexpected error during authentication test: {str(e)}",
-                error_details=str(e)
-            )
-    
     @staticmethod
-    async def test_credentials_auth(crafty_url: str, username: str, password: str, server_id: str) -> AuthenticationTestResult:
-        """Test username/password authentication with TokenManager
-        
-        Args:
-            crafty_url: Crafty Controller base URL
-            username: Username for authentication
-            password: Password for authentication
-            server_id: Server ID to test with
-            
-        Returns:
-            AuthenticationTestResult with test results
-        """
+    async def test_credentials_auth(base_url: str, username: str, password: str, server_id: str) -> AuthenticationTestResult:
+        """Test username/password authentication with TokenManager"""
         start_time = asyncio.get_event_loop().time()
         token_manager = None
         
         try:
             # Initialize TokenManager
-            token_manager = TokenManager(crafty_url, username, password)
+            token_manager = TokenManager(base_url, username, password)
             
-            async with CraftyAPI(crafty_url, token_manager) as api:
+            async with DiscopanelAPI(base_url, token_manager) as api:
                 async with asyncio.timeout(STARTUP_TEST_TIMEOUT):
-                    response = await api.get_server_stats(server_id)
+                    response = await api.get_server(server_id)
                     
                 end_time = asyncio.get_event_loop().time()
                 latency = (end_time - start_time) * 1000  # Convert to milliseconds
@@ -347,7 +242,7 @@ class AuthenticationTester:
                 message=f"TokenManager authentication failed: {str(e)}",
                 error_details=str(e)
             )
-        except CraftyAPIError as e:
+        except DiscopanelAPIError as e:
             return AuthenticationTestResult(
                 success=False,
                 auth_method="credentials",
@@ -489,11 +384,10 @@ def _validate_auth_config(validator: ConfigurationValidator) -> Tuple[bool, Vali
 
 async def _perform_auth_test(auth_config_result: ValidationResult, tester: AuthenticationTester) -> Optional[AuthenticationTestResult]:
     """Perform authentication testing step"""
-    crafty_url = os.getenv('CRAFTY_URL')
+    discopanel_url = os.getenv('DISCOPANEL_URL')
     server_id = os.getenv('SERVER_ID')
-    crafty_token = os.getenv('CRAFTY_TOKEN')
-    crafty_username = os.getenv('CRAFTY_USERNAME')
-    crafty_password = os.getenv('CRAFTY_PASSWORD')
+    discopanel_username = os.getenv('DISCOPANEL_USERNAME')
+    discopanel_password = os.getenv('DISCOPANEL_PASSWORD')
     
     if not auth_config_result.details:
         logger.error("Auth config result is missing details")
@@ -501,16 +395,10 @@ async def _perform_auth_test(auth_config_result: ValidationResult, tester: Authe
         
     logger.info(f"Testing authentication using method: {auth_config_result.details.get('auth_method', 'unknown')}")
     
-    if crafty_token:
-        if not crafty_url or not server_id:
-            logger.error("Missing required configuration for static token auth")
-            return None
-        return await tester.test_static_token_auth(crafty_url, crafty_token, server_id)
-    else:
-        if not crafty_url or not crafty_username or not crafty_password or not server_id:
-            logger.error("Missing required configuration for credentials auth")
-            return None
-        return await tester.test_credentials_auth(crafty_url, crafty_username, crafty_password, server_id)
+    if not discopanel_url or not discopanel_username or not discopanel_password or not server_id:
+        logger.error("Missing required configuration for credentials auth")
+        return None
+    return await tester.test_credentials_auth(discopanel_url, discopanel_username, discopanel_password, server_id)
 
 
 def _validate_token_lifetime_step(auth_test_result: AuthenticationTestResult, 

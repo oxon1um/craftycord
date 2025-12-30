@@ -1,8 +1,4 @@
-"""Token management for Crafty Controller API authentication
-
-This module provides a thread-safe token manager that handles login, token storage,
-and token expiration for the Crafty Controller API.
-"""
+"""Token management for Discopanel API authentication."""
 
 import aiohttp
 import asyncio
@@ -37,22 +33,14 @@ class TokenManagerConnectionError(TokenManagerError):
 
 
 class TokenManager:
-    """Thread-safe token manager for Crafty Controller API authentication
-    
-    This class manages API authentication tokens, handling login, token storage,
-    and expiration checking in a thread-safe manner using asyncio.Lock.
-    
-    Usage:
-        token_manager = TokenManager(base_url, username, password)
-        token = await token_manager.get_token()
-    """
-    
-    BASE_LOGIN_ENDPOINT = "/api/v2/auth/login"
+    """Thread-safe token manager for Discopanel authentication."""
+
+    BASE_LOGIN_ENDPOINT = "/api/auth/login"
     REFRESH_BUFFER_HOURS = 4
     MAX_RETRY_ATTEMPTS = 3
     INITIAL_RETRY_DELAY = 1.0
     MAX_RETRY_DELAY = 60.0
-    CACHE_FILE_NAME = "~/.crafty_token_cache.json"
+    CACHE_FILE_NAME = "~/.discopanel_token_cache.json"
     
     @staticmethod
     def _generate_correlation_id() -> str:
@@ -80,13 +68,6 @@ class TokenManager:
         }
     
     def __init__(self, base_url: str, username: str, password: str) -> None:
-        """Initialize the token manager
-        
-        Args:
-            base_url: The base URL of the Crafty Controller instance
-            username: Username for authentication
-            password: Password for authentication
-        """
         self.base_url = base_url.rstrip('/')
         self.username = username
         self.password = password
@@ -162,14 +143,14 @@ class TokenManager:
         Raises:
             TokenManagerAuthError: If token not found in response
         """
-        data = response_data['data']
+        data = response_data.get('data', response_data)
         token = data.get('token')
         
         if not token:
             raise TokenManagerAuthError("Token not found in login response")
         
         # Parse token expiration if available
-        expires = data.get('expires')
+        expires = data.get('expires') or data.get('expires_at')
         self._token_expires_at = self._parse_token_expiration(expires)
         
         # Store the token
@@ -205,19 +186,19 @@ class TokenManager:
             TokenManagerAuthError: If authentication fails
         """
         async with session.post(url, json=login_data, headers=headers) as response:
-            if response.status == 200:
-                response_data = await response.json()
-                
-                if response_data.get('status') == 'ok' and 'data' in response_data:
-                    return self._process_login_response_data(response_data, correlation_id)
-            
-            # Login failed - parse error response
+            response_data: dict = {}
             try:
-                error_data = await response.json()
-                error_message = error_data.get('error', f"HTTP {response.status}: {response.reason}")
+                response_data = await response.json()
             except Exception:
-                error_message = f"HTTP {response.status}: {response.reason}"
-            
+                response_data = {}
+
+            if response.status == 200:
+                try:
+                    return self._process_login_response_data(response_data, correlation_id)
+                except TokenManagerError:
+                    pass
+
+            error_message = response_data.get('error') or response_data.get('message') or f"HTTP {response.status}: {response.reason}"
             redacted_creds = self._redact_credentials(self.username, self.password)
             logger.error(f"[{correlation_id}] Authentication failed - user: {redacted_creds['username']}, status: {response.status}, error: {error_message}")
             raise TokenManagerAuthError(f"Login failed: {error_message}", response.status)
