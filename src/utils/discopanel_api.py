@@ -175,36 +175,64 @@ class DiscopanelAPI:
             raise DiscopanelAPIError(f"Unexpected error: {str(e)}")
 
     def _parse_server_info(self, data: Dict[str, Any]) -> ServerInfo:
+        def _first(payload: Dict[str, Any], keys: list[str]) -> Optional[Any]:
+            for key in keys:
+                if key in payload and payload[key] is not None:
+                    return payload[key]
+            return None
+
         def _safe_int(value: Any) -> Optional[int]:
+            if value is None:
+                return None
             try:
                 return int(value)
             except (TypeError, ValueError):
+                if isinstance(value, str):
+                    # Handle formats like "0/20" by taking the first segment
+                    segment = value.split("/")[0]
+                    num = "".join(ch for ch in segment if ch.isdigit() or ch == "-")
+                    if num:
+                        try:
+                            return int(num)
+                        except ValueError:
+                            return None
                 return None
 
         def _safe_float(value: Any) -> Optional[float]:
+            if value is None:
+                return None
             try:
                 return float(value)
             except (TypeError, ValueError):
+                if isinstance(value, str):
+                    digits = "".join(ch for ch in value if (ch.isdigit() or ch in ".-"))
+                    try:
+                        return float(digits)
+                    except ValueError:
+                        return None
                 return None
 
-        payload = data.get("server", data)
+        payload = data.get("server", data.get("data", data))
+        status_raw = _first(payload, ["status", "server_status", "state"]) or "UNKNOWN"
+        name_raw = _first(payload, ["name", "server_name"]) or "Unknown"
+
         return ServerInfo(
-            id=str(payload.get("id", "")),
-            name=str(payload.get("name", "Unknown")),
-            status=str(payload.get("status", "UNKNOWN")).upper(),
-            mc_version=payload.get("mc_version"),
-            mod_loader=payload.get("mod_loader"),
-            players_online=_safe_int(payload.get("players_online")),
-            max_players=_safe_int(payload.get("max_players")),
-            cpu_percent=_safe_float(payload.get("cpu_percent")),
-            memory_usage=_safe_int(payload.get("memory_usage")),
-            memory=_safe_int(payload.get("memory")),
-            tps=_safe_float(payload.get("tps"))
+            id=str(_first(payload, ["id", "server_id"]) or ""),
+            name=str(name_raw),
+            status=str(status_raw).upper(),
+            mc_version=_first(payload, ["mc_version", "minecraft_version", "mcVersion"]),
+            mod_loader=_first(payload, ["mod_loader", "loader", "modLoader"]),
+            players_online=_safe_int(_first(payload, ["players_online", "online_players", "playersOnline", "onlinePlayers", "online"])),
+            max_players=_safe_int(_first(payload, ["max_players", "players_max", "maxPlayers"])),
+            cpu_percent=_safe_float(_first(payload, ["cpu_percent", "cpu", "cpuPercent"])),
+            memory_usage=_safe_int(_first(payload, ["memory_usage", "memoryUsed", "memory_used", "memoryUsage"])),
+            memory=_safe_int(_first(payload, ["memory", "memoryLimit", "memory_limit"])),
+            tps=_safe_float(_first(payload, ["tps"]))
         )
 
-    async def _perform_action(self, endpoint: str, verb: str, server_id: str) -> ApiResponse:
+    async def _perform_action(self, endpoint: str, verb: str, server_id: str, payload: Dict[str, Any]) -> ApiResponse:
         try:
-            resp = await self._make_request("POST", endpoint)
+            resp = await self._make_request("POST", endpoint, json=payload)
             resp.message = f"Server {server_id} {verb} command sent successfully"
             return resp
         except DiscopanelAPIError as e:
@@ -215,13 +243,28 @@ class DiscopanelAPI:
             )
 
     async def start_server(self, server_id: str) -> ApiResponse:
-        return await self._perform_action(f"/servers/{server_id}/start", "start", server_id)
+        return await self._perform_action(
+            "/discopanel.v1.ServerService/StartServer",
+            "start",
+            server_id,
+            {"id": server_id}
+        )
 
     async def stop_server(self, server_id: str) -> ApiResponse:
-        return await self._perform_action(f"/servers/{server_id}/stop", "stop", server_id)
+        return await self._perform_action(
+            "/discopanel.v1.ServerService/StopServer",
+            "stop",
+            server_id,
+            {"id": server_id}
+        )
 
     async def restart_server(self, server_id: str) -> ApiResponse:
-        return await self._perform_action(f"/servers/{server_id}/restart", "restart", server_id)
+        return await self._perform_action(
+            "/discopanel.v1.ServerService/RestartServer",
+            "restart",
+            server_id,
+            {"id": server_id}
+        )
 
     async def send_command(self, server_id: str, command: str) -> ApiResponse:
         if not command or not command.strip():
@@ -230,8 +273,8 @@ class DiscopanelAPI:
         try:
             resp = await self._make_request(
                 "POST",
-                f"/servers/{server_id}/command",
-                json={"command": command}
+                "/discopanel.v1.ServerService/SendCommand",
+                json={"id": server_id, "command": command}
             )
             resp.message = f"Command '{command}' sent to server {server_id}"
             return resp
@@ -244,7 +287,11 @@ class DiscopanelAPI:
 
     async def get_server(self, server_id: str) -> ApiResponse:
         try:
-            resp = await self._make_request("GET", f"/servers/{server_id}")
+            resp = await self._make_request(
+                "POST",
+                "/discopanel.v1.ServerService/GetServer",
+                json={"id": server_id}
+            )
             if resp.success and isinstance(resp.data, dict):
                 resp.data = self._parse_server_info(resp.data)
                 resp.message = f"Server {server_id} information retrieved successfully"

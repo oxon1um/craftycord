@@ -35,7 +35,7 @@ class TokenManagerConnectionError(TokenManagerError):
 class TokenManager:
     """Thread-safe token manager for Discopanel authentication."""
 
-    BASE_LOGIN_ENDPOINT = "/api/auth/login"
+    BASE_LOGIN_ENDPOINT = "/discopanel.v1.AuthService/Login"
     REFRESH_BUFFER_HOURS = 4
     MAX_RETRY_ATTEMPTS = 3
     INITIAL_RETRY_DELAY = 1.0

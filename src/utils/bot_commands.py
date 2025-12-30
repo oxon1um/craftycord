@@ -106,16 +106,18 @@ def create_response_embed(bot, response: ApiResponse, action: str, server_id: st
 
 
 def _derive_server_state(server: ServerInfo) -> Tuple[str, str, discord.Color]:
-    status = (server.status or "UNKNOWN").upper()
-    if status in ("RUNNING", "STARTING"):
-        return "🟢", status.title(), discord.Color.green()
-    if status in ("STOPPING",):
-        return "🟠", status.title(), discord.Color.orange()
-    if status in ("RESTARTING",):
-        return "🔄", status.title(), discord.Color.blue()
-    if status in ("ERROR", "UNHEALTHY"):
-        return "💥", status.title(), discord.Color.red()
-    return "🔴", status.title(), discord.Color.dark_grey()
+    status_raw = (server.status or "UNKNOWN").upper()
+    if "RUN" in status_raw:
+        return "🟢", "Running", discord.Color.green()
+    if "START" in status_raw:
+        return "🟡", "Starting", discord.Color.gold()
+    if "STOP" in status_raw:
+        return "🔴", "Stopped", discord.Color.dark_red()
+    if "RESTART" in status_raw:
+        return "🔄", "Restarting", discord.Color.blue()
+    if "ERROR" in status_raw or "FAIL" in status_raw or "UNHEALTHY" in status_raw:
+        return "💥", "Issue", discord.Color.red()
+    return "⚪", status_raw.title(), discord.Color.light_grey()
 
 
 def _format_players(server: ServerInfo) -> str:
@@ -137,39 +139,46 @@ def _format_memory(server: ServerInfo) -> str:
     parts: List[str] = []
     if server.memory_usage is not None:
         try:
-            mb_used = server.memory_usage / (1024 * 1024)
-            parts.append(f"{mb_used:.1f} MB used")
+            value = float(server.memory_usage)
+            # Heuristic: if very large, treat as bytes; otherwise assume MB
+            if value > 1024 * 1024:
+                mb_used = value / (1024 * 1024)
+            else:
+                mb_used = value
+            if mb_used >= 1024:
+                gb_used = mb_used / 1024
+                parts.append(f"{gb_used:.2f} GB used")
+            else:
+                parts.append(f"{mb_used:.1f} MB used")
         except Exception:
             parts.append(str(server.memory_usage))
     if server.memory is not None:
-        parts.append(f"{server.memory} MB limit")
+        if server.memory >= 1024:
+            parts.append(f"{server.memory/1024:.2f} GB limit")
+        else:
+            parts.append(f"{server.memory} MB limit")
     return " / ".join(parts)
 
 
 def create_status_embed(bot, server: ServerInfo) -> discord.Embed:
     status_emoji, status_text, color = _derive_server_state(server)
     server_name = server.name or "Unknown Server"
+    description = f"{status_emoji} **{status_text}**"
     embed = discord.Embed(
-        title=f"📊 Server Status: {server_name}",
+        title=f"🧱 {server_name} (MC)",
+        description=description,
         color=color,
         timestamp=discord.utils.utcnow()
     )
 
-    fields = [
-        ("Status", f"{status_emoji} {status_text}", True),
-        (SERVER_ID_FIELD, str(server.id), True),
-        ("Minecraft Version", server.mc_version or "Unknown", True),
-        ("Mod Loader", server.mod_loader or "Unknown", True),
-        ("Players Online", _format_players(server), True),
-        ("CPU Usage", f"{server.cpu_percent:.1f}%" if server.cpu_percent is not None else "Unknown", True),
-        ("Memory", _format_memory(server), True),
-    ]
-
+    embed.add_field(name="🆔 Server ID", value=str(server.id), inline=False)
+    embed.add_field(name="🎮 Version", value=server.mc_version or "Unknown", inline=True)
+    embed.add_field(name="🪓 Loader", value=server.mod_loader or "Unknown", inline=True)
+    embed.add_field(name="👥 Players", value=_format_players(server), inline=True)
+    embed.add_field(name="🖥️ CPU", value=f"{server.cpu_percent:.1f}%" if server.cpu_percent is not None else "Unknown", inline=True)
+    embed.add_field(name="📦 Memory", value=_format_memory(server), inline=True)
     if server.tps is not None:
-        fields.append(("TPS", f"{server.tps:.2f}", True))
-
-    for name, value, inline in fields:
-        embed.add_field(name=name, value=value, inline=inline)
+        embed.add_field(name="⏱️ TPS", value=f"{server.tps:.2f}", inline=True)
 
     embed.set_footer(
         text=BOT_FOOTER_TEXT,
