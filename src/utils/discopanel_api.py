@@ -225,8 +225,8 @@ class DiscopanelAPI:
             players_online=_safe_int(_first(payload, ["players_online", "online_players", "playersOnline", "onlinePlayers", "online"])),
             max_players=_safe_int(_first(payload, ["max_players", "players_max", "maxPlayers"])),
             cpu_percent=_safe_float(_first(payload, ["cpu_percent", "cpu", "cpuPercent"])),
-            memory_usage=_safe_int(_first(payload, ["memory_usage", "memoryUsed", "memory_used", "memoryUsage"])),
-            memory=_safe_int(_first(payload, ["memory", "memoryLimit", "memory_limit"])),
+            memory_usage=_safe_int(_first(payload, ["memory_usage", "memoryUsed", "memory_used", "memoryUsage", "mem"])),
+            memory=_safe_int(_first(payload, ["memory", "memoryLimit", "memory_limit", "maxMemory"])),
             tps=_safe_float(_first(payload, ["tps"]))
         )
 
