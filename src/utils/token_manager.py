@@ -5,7 +5,6 @@ import asyncio
 import logging
 import random
 import json
-import os
 import stat
 import uuid
 from pathlib import Path

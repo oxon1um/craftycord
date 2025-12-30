@@ -6,10 +6,9 @@ including checking if interactions are still valid and sending responses
 without triggering errors when interactions have expired.
 """
 
-import asyncio
 import logging
 import discord
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 

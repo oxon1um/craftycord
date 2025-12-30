@@ -1,8 +1,6 @@
 import os
 import asyncio
 import logging
-import uuid
-from typing import List, NoReturn
 from dotenv import load_dotenv
 from .utils.bot_commands import create_bot
 from .utils.monitoring import initialize_sentry, capture_exception, get_monitoring_status
