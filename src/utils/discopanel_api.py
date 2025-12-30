@@ -10,12 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 def redact_authorization(headers: Dict[str, str]) -> Dict[str, str]:
-    """Return a copy of headers with Authorization value redacted."""
+    """Return a copy of headers with Authorization value redacted (case-insensitive)."""
     redacted = headers.copy()
-    for key in redacted:
+    for key in list(redacted.keys()):
         if key.lower() == "authorization":
             redacted[key] = "REDACTED"
-            break
     return redacted
 
 
@@ -63,7 +62,7 @@ class DiscopanelAPI:
         self,
         base_url: str,
         token_or_manager: Optional[Union[str, Any]] = None,
-        api_prefix: str = "/api"
+        api_prefix: str = ""
     ) -> None:
         if not token_or_manager:
             raise ValueError("An API token or TokenManager must be provided")

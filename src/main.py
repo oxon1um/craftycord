@@ -4,9 +4,9 @@ import logging
 import uuid
 from typing import List, NoReturn
 from dotenv import load_dotenv
-from utils.bot_commands import create_bot
-from utils.monitoring import initialize_sentry, capture_exception, get_monitoring_status
-from utils.config_validation import perform_startup_health_check
+from .utils.bot_commands import create_bot
+from .utils.monitoring import initialize_sentry, capture_exception, get_monitoring_status
+from .utils.config_validation import perform_startup_health_check
 
 # Load environment variables
 load_dotenv()

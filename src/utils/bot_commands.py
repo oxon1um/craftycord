@@ -9,10 +9,10 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Dict, Any, Optional, List, Tuple, Callable
 
-from utils.discopanel_api import DiscopanelAPI, ServerInfo, ApiResponse, DiscopanelAPIError
-from utils.token_manager import TokenManager, TokenManagerError
-from utils.monitoring import capture_exception, add_breadcrumb
-from utils.discord_utils import can_respond, safe_respond_async, safe_followup_async
+from .discopanel_api import DiscopanelAPI, ServerInfo, ApiResponse, DiscopanelAPIError
+from .token_manager import TokenManager, TokenManagerError
+from .monitoring import capture_exception, add_breadcrumb
+from .discord_utils import can_respond, safe_respond_async, safe_followup_async
 
 logger = logging.getLogger(__name__)
 
@@ -148,8 +148,9 @@ def _format_memory(server: ServerInfo) -> str:
 
 def create_status_embed(bot, server: ServerInfo) -> discord.Embed:
     status_emoji, status_text, color = _derive_server_state(server)
+    server_name = server.name or "Unknown Server"
     embed = discord.Embed(
-        title=f"📊 Server Status: {server.name}",
+        title=f"📊 Server Status: {server_name}",
         color=color,
         timestamp=discord.utils.utcnow()
     )

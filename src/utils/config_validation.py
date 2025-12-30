@@ -8,8 +8,8 @@ from typing import Dict, List, Optional, Union, Tuple
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from utils.discopanel_api import DiscopanelAPI, DiscopanelAPIError, ApiResponse
-from utils.token_manager import TokenManager, TokenManagerError
+from .discopanel_api import DiscopanelAPI, DiscopanelAPIError, ApiResponse
+from .token_manager import TokenManager, TokenManagerError
 
 
 logger = logging.getLogger(__name__)

@@ -131,41 +131,33 @@ class TokenManager:
             return None
     
     def _process_login_response_data(self, response_data: dict, correlation_id: str) -> str:
-        """Process successful login response data
-        
-        Args:
-            response_data: The JSON response data from the API
-            correlation_id: Correlation ID for logging
-            
-        Returns:
-            The authentication token
-            
-        Raises:
-            TokenManagerAuthError: If token not found in response
-        """
-        data = response_data.get('data', response_data)
-        token = data.get('token')
-        
+        """Process successful login response data."""
+        candidates = []
+        if isinstance(response_data, dict):
+            candidates.append(response_data)
+            if isinstance(response_data.get('data'), dict):
+                candidates.append(response_data['data'])
+
+        token = None
+        expires = None
+        for candidate in candidates:
+            token = candidate.get('token') or candidate.get('access_token')
+            expires = candidate.get('expires') or candidate.get('expires_at')
+            if token:
+                break
+
         if not token:
             raise TokenManagerAuthError("Token not found in login response")
-        
-        # Parse token expiration if available
-        expires = data.get('expires') or data.get('expires_at')
+
         self._token_expires_at = self._parse_token_expiration(expires)
-        
-        # Store the token
         self._token = token
-        
-        # Save token to cache for persistence
         self._save_token_to_cache(correlation_id)
-        
-        # Schedule proactive refresh if token has expiration
         self._schedule_refresh_task()
-        
+
         redacted_creds = self._redact_credentials(self.username, self.password)
         logger.info(f"[{correlation_id}] Authentication successful - user: {redacted_creds['username']}, expires: {self._token_expires_at or 'unknown'}")
         logger.debug(f"[{correlation_id}] Token length: {len(token)}, timestamp: {datetime.now(timezone.utc)}")
-        
+
         return token
     
     async def _handle_login_request(self, session: aiohttp.ClientSession, url: str, 
@@ -195,10 +187,15 @@ class TokenManager:
             if response.status == 200:
                 try:
                     return self._process_login_response_data(response_data, correlation_id)
-                except TokenManagerError:
-                    pass
+                except TokenManagerError as token_error:
+                    logger.debug(f"[{correlation_id}] Could not parse token from login response: {token_error}")
 
-            error_message = response_data.get('error') or response_data.get('message') or f"HTTP {response.status}: {response.reason}"
+            error_message = (
+                response_data.get('error')
+                or response_data.get('message')
+                or response_data.get('detail')
+                or f"HTTP {response.status}: {response.reason}"
+            )
             redacted_creds = self._redact_credentials(self.username, self.password)
             logger.error(f"[{correlation_id}] Authentication failed - user: {redacted_creds['username']}, status: {response.status}, error: {error_message}")
             raise TokenManagerAuthError(f"Login failed: {error_message}", response.status)
