@@ -1,0 +1,16 @@
+discord.py>=2.3
+aiohttp>=3.8.1
+python-dotenv>=0.19.2
+
+# Error tracking (optional)
+sentry-sdk>=1.32.0
+
+# Testing dependencies
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+aioresponses>=0.7.0
+
+# Type checking
+mypy>=1.0.0
+typing_extensions>=4.0.0

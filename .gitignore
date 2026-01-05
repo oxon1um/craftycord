@@ -1,0 +1,14 @@
+# Python bytecode files
+*.pyc
+*.pyo
+# Distribution / packaging
+docs/
+tests/
+venv/
+.mypy_cache/
+__pycache__/
+.pytest_cache/
+**/.DS_Store
+
+# Environment variables
+.env
